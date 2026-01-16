@@ -265,6 +265,7 @@
             font-size: 13px;
             color: var(--dim);
             margin-bottom: 15px;
+            line-height: 1.6;
         }
         .path-info strong {
             color: var(--accent);
@@ -388,18 +389,19 @@
     <div class="modal-overlay" id="pathModal">
         <div class="modal">
             <div class="modal-header">
-                <h2>String Path</h2>
+                <h2>String Path (Continuous)</h2>
                 <button class="modal-close" id="modalClose">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="path-info">
                     Total: <strong id="pathTotal">0</strong> strings | 
-                    Pegs: <strong id="pathPegs">0</strong> | 
-                    Peg numbering starts from <strong>0</strong> at top (12 o'clock), clockwise
+                    Pegs: <strong id="pathPegs">0</strong><br>
+                    Peg <strong>0</strong> is at top (12 o'clock), numbering goes <strong>clockwise</strong>.<br>
+                    This is a <strong>continuous path</strong> — wind the string without cutting!
                 </div>
                 <div class="format-select">
                     <button class="format-btn active" data-format="sequence">Sequence</button>
-                    <button class="format-btn" data-format="pairs">Pairs</button>
+                    <button class="format-btn" data-format="steps">Steps</button>
                     <button class="format-btn" data-format="csv">CSV</button>
                     <button class="format-btn" data-format="json">JSON</button>
                 </div>
@@ -415,18 +417,22 @@
 <script>
 /**
  * ============================================================================
- * STRING ART GENERATOR WITH PATH EXPORT
+ * STRING ART GENERATOR - CONTINUOUS PATH VERSION
  * ============================================================================
  * 
- * This application converts any image into a "string art" representation.
- * It includes path export functionality for physical recreation.
+ * This version generates a CONTINUOUS PATH that can be used for physical
+ * string art recreation. The algorithm always moves from the current peg
+ * to the next best peg, creating an unbroken sequence.
  * 
- * PATH EXPORT FORMATS:
- * --------------------
- * 1. Sequence: 0 → 180 → 45 → 230 → ... (continuous path)
- * 2. Pairs: Each line as "from → to" pairs
- * 3. CSV: Comma-separated values for spreadsheet import
- * 4. JSON: Structured data for programmatic use
+ * ALGORITHM (Continuous Path):
+ * ----------------------------
+ * 1. Start at peg 0
+ * 2. From current peg, find the best unvisited connection
+ * 3. Draw that string and move to the new peg
+ * 4. Repeat until no good connections remain
+ * 
+ * This produces output like: 0 → 180 → 45 → 230 → 12 → ...
+ * which represents the actual winding order for physical recreation.
  * 
  * ============================================================================
  */
@@ -493,9 +499,9 @@
         running: false,
         stopFlag: false,
         fileName: '',
-        // Path tracking
-        stringPath: [],      // Array of [fromPeg, toPeg] pairs
-        numPegsUsed: 0,      // Number of pegs used in generation
+        // Path tracking - now a simple array of peg numbers
+        stringPath: [],      // [0, 180, 45, 230, 12, ...] continuous sequence
+        numPegsUsed: 0,
         currentFormat: 'sequence'
     };
     
@@ -528,31 +534,22 @@
     // =========================================================================
     
     /**
-     * Convert the path to a continuous sequence.
-     * This represents the order in which you would wind the string.
+     * Format as continuous sequence with arrows.
+     * This is the most useful format for physical recreation.
      * 
-     * Example output: 0 → 180 → 45 → 230 → 12 → ...
-     * 
-     * @returns {string} Formatted sequence string
+     * Example: 0 → 180 → 45 → 230 → 12 → ...
      */
     function formatAsSequence() {
         if (state.stringPath.length === 0) return 'No path generated yet.';
         
-        // Build continuous path by following connections
-        const sequence = [state.stringPath[0][0]];
-        
-        for (const [from, to] of state.stringPath) {
-            sequence.push(to);
-        }
-        
-        // Format with arrows, 10 nodes per line
         let result = '';
-        for (let i = 0; i < sequence.length; i++) {
-            result += sequence[i];
-            if (i < sequence.length - 1) {
+        for (let i = 0; i < state.stringPath.length; i++) {
+            result += state.stringPath[i];
+            if (i < state.stringPath.length - 1) {
                 result += ' → ';
             }
-            if ((i + 1) % 10 === 0 && i < sequence.length - 1) {
+            // Line break every 10 pegs for readability
+            if ((i + 1) % 10 === 0 && i < state.stringPath.length - 1) {
                 result += '\n';
             }
         }
@@ -561,89 +558,84 @@
     }
     
     /**
-     * Format path as individual pairs.
-     * Each line shows one string connection.
+     * Format as numbered steps.
+     * Each line shows: step number, from peg, to peg
      * 
-     * Example output:
-     * 1: 0 → 180
-     * 2: 180 → 45
-     * 3: 45 → 230
-     * 
-     * @returns {string} Formatted pairs string
+     * Example:
+     *    1: 0 → 180
+     *    2: 180 → 45
+     *    3: 45 → 230
      */
-    function formatAsPairs() {
-        if (state.stringPath.length === 0) return 'No path generated yet.';
+    function formatAsSteps() {
+        if (state.stringPath.length < 2) return 'No path generated yet.';
         
-        return state.stringPath
-            .map((pair, i) => `${(i + 1).toString().padStart(4)}: ${pair[0]} → ${pair[1]}`)
-            .join('\n');
+        const lines = [];
+        for (let i = 0; i < state.stringPath.length - 1; i++) {
+            const stepNum = (i + 1).toString().padStart(4);
+            lines.push(`${stepNum}: ${state.stringPath[i]} → ${state.stringPath[i + 1]}`);
+        }
+        
+        return lines.join('\n');
     }
     
     /**
-     * Format path as CSV for spreadsheet import.
+     * Format as CSV for spreadsheet import.
      * 
-     * Example output:
+     * Example:
      * step,from,to
      * 1,0,180
      * 2,180,45
-     * 
-     * @returns {string} CSV formatted string
      */
     function formatAsCSV() {
-        if (state.stringPath.length === 0) return 'No path generated yet.';
+        if (state.stringPath.length < 2) return 'No path generated yet.';
         
         let csv = 'step,from,to\n';
-        csv += state.stringPath
-            .map((pair, i) => `${i + 1},${pair[0]},${pair[1]}`)
-            .join('\n');
+        for (let i = 0; i < state.stringPath.length - 1; i++) {
+            csv += `${i + 1},${state.stringPath[i]},${state.stringPath[i + 1]}\n`;
+        }
         
-        return csv;
+        return csv.trim();
     }
     
     /**
-     * Format path as JSON for programmatic use.
-     * 
-     * @returns {string} JSON formatted string
+     * Format as JSON for programmatic use.
      */
     function formatAsJSON() {
-        if (state.stringPath.length === 0) return '[]';
+        if (state.stringPath.length === 0) return '{}';
+        
+        const steps = [];
+        for (let i = 0; i < state.stringPath.length - 1; i++) {
+            steps.push({
+                step: i + 1,
+                from: state.stringPath[i],
+                to: state.stringPath[i + 1]
+            });
+        }
         
         const data = {
             metadata: {
-                totalStrings: state.stringPath.length,
-                numPegs: state.numPegsUsed,
-                generatedAt: new Date().toISOString()
+                totalStrings: state.stringPath.length - 1,
+                totalPegs: state.numPegsUsed,
+                generatedAt: new Date().toISOString(),
+                description: "Continuous path for string art. Peg 0 is at 12 o'clock, numbering clockwise."
             },
-            path: state.stringPath.map((pair, i) => ({
-                step: i + 1,
-                from: pair[0],
-                to: pair[1]
-            }))
+            sequence: state.stringPath,
+            steps: steps
         };
         
         return JSON.stringify(data, null, 2);
     }
     
-    /**
-     * Get formatted path based on current format selection.
-     * 
-     * @returns {string} Formatted path string
-     */
     function getFormattedPath() {
         switch (state.currentFormat) {
             case 'sequence': return formatAsSequence();
-            case 'pairs': return formatAsPairs();
+            case 'steps': return formatAsSteps();
             case 'csv': return formatAsCSV();
             case 'json': return formatAsJSON();
             default: return formatAsSequence();
         }
     }
     
-    /**
-     * Get file extension for current format.
-     * 
-     * @returns {string} File extension
-     */
     function getFileExtension() {
         switch (state.currentFormat) {
             case 'csv': return 'csv';
@@ -657,7 +649,7 @@
     // =========================================================================
     
     function showPathModal() {
-        elements.pathTotal.textContent = state.stringPath.length;
+        elements.pathTotal.textContent = Math.max(0, state.stringPath.length - 1);
         elements.pathPegs.textContent = state.numPegsUsed;
         elements.pathContent.textContent = getFormattedPath();
         elements.pathModal.classList.add('show');
@@ -703,10 +695,15 @@
     // PRE-COMPUTATION FUNCTIONS
     // =========================================================================
     
+    /**
+     * Pre-compute peg positions around the circle.
+     * Peg 0 is at top (12 o'clock), numbering goes clockwise.
+     */
     function precomputePegPositions(numPegs) {
         const positions = new Float32Array(numPegs * 2);
         
         for (let i = 0; i < numPegs; i++) {
+            // Start from top (-π/2) and go clockwise
             const angle = (i / numPegs) * Math.PI * 2 - Math.PI / 2;
             positions[i * 2] = CENTER + RADIUS * Math.cos(angle);
             positions[i * 2 + 1] = CENTER + RADIUS * Math.sin(angle);
@@ -715,6 +712,10 @@
         return positions;
     }
     
+    /**
+     * Pre-compute pixels for all possible line connections.
+     * Returns a Map where key is "smallerPeg,largerPeg" and value is pixel array.
+     */
     function precomputeAllLinePixels(numPegs, positions, minDist) {
         const lineCache = new Map();
         
@@ -723,6 +724,7 @@
             const y0 = Math.round(positions[i * 2 + 1]);
             
             for (let j = i + 1; j < numPegs; j++) {
+                // Calculate circular distance
                 const dist = Math.min(j - i, numPegs - (j - i));
                 if (dist < minDist) continue;
                 
@@ -730,7 +732,9 @@
                 const y1 = Math.round(positions[j * 2 + 1]);
                 
                 const pixels = bresenhamLine(x0, y0, x1, y1);
-                const key = i * numPegs + j;
+                
+                // Use string key for clarity: "smaller,larger"
+                const key = `${i},${j}`;
                 lineCache.set(key, pixels);
             }
         }
@@ -738,6 +742,16 @@
         return lineCache;
     }
     
+    /**
+     * Get cache key for a connection (always smaller,larger order).
+     */
+    function getConnectionKey(peg1, peg2) {
+        return peg1 < peg2 ? `${peg1},${peg2}` : `${peg2},${peg1}`;
+    }
+    
+    /**
+     * Bresenham's line algorithm - returns array of pixel indices.
+     */
     function bresenhamLine(x0, y0, x1, y1) {
         const pixels = [];
         const dx = Math.abs(x1 - x0);
@@ -845,9 +859,16 @@
     }
     
     // =========================================================================
-    // MAIN STRING ART GENERATION ALGORITHM
+    // MAIN STRING ART GENERATION - CONTINUOUS PATH ALGORITHM
     // =========================================================================
     
+    /**
+     * Generate string art using a CONTINUOUS PATH algorithm.
+     * 
+     * Unlike the original algorithm that finds the globally best line each iteration,
+     * this version always moves from the CURRENT peg to the next best peg.
+     * This produces a path that can actually be wound with a single thread.
+     */
     async function startGeneration() {
         if (state.running || !state.sourceImg) return;
         
@@ -862,6 +883,7 @@
         elements.btnDownload.disabled = true;
         elements.btnPath.disabled = true;
         
+        // Get parameters
         const numPegs = parseInt(elements.numPegsInput.value);
         const lineAlpha = parseInt(elements.lineAlphaInput.value) / 100;
         const threshold = parseInt(elements.thresholdInput.value);
@@ -869,19 +891,20 @@
         const darkness = Math.round(lineAlpha * 255);
         const minDist = Math.floor(numPegs * 0.1);
         
-        // Store number of pegs for path export
         state.numPegsUsed = numPegs;
         
+        // Pre-computation phase
         setStatus('Pre-computing peg positions...', true);
         await sleep(10);
         
         const pegPositions = precomputePegPositions(numPegs);
         
-        setStatus('Pre-computing line paths (this may take a few seconds)...', true);
+        setStatus('Pre-computing line paths...', true);
         await sleep(10);
         
         const linePixelsCache = precomputeAllLinePixels(numPegs, pegPositions, minDist);
         
+        // Initialize output canvas
         outCtx.fillStyle = '#fff';
         outCtx.fillRect(0, 0, SIZE, SIZE);
         outCtx.strokeStyle = '#ddd';
@@ -890,106 +913,123 @@
         outCtx.arc(CENTER, CENTER, RADIUS, 0, Math.PI * 2);
         outCtx.stroke();
         
+        // Initialize brightness tracking
         const currentData = new Uint8Array(SIZE * SIZE);
         currentData.fill(255);
         
-        const used = new Set();
+        // Track used connections (each connection can only be used once)
+        const usedConnections = new Set();
         
+        // Statistics
         let lineCount = 0;
-        let iterCount = 0;
         const startTime = performance.now();
         
-        // Track current peg for continuous path
+        // =====================================================================
+        // CONTINUOUS PATH ALGORITHM
+        // =====================================================================
+        
+        // Start at peg 0
         let currentPeg = 0;
+        state.stringPath.push(currentPeg);
         
-        setStatus('Generating...', true);
+        setStatus('Generating continuous path...', true);
         
-        mainLoop: while (!state.stopFlag && lineCount < maxLines) {
-            let improved = false;
-            iterCount++;
+        // Keep finding the next best peg from current position
+        while (!state.stopFlag && lineCount < maxLines) {
+            let bestNextPeg = -1;
+            let maxDiff = 0;
+            let bestPixels = null;
             
-            for (let pegIndex = 0; pegIndex < numPegs && !state.stopFlag; pegIndex++) {
-                let bestKey = -1;
-                let maxDiff = 0;
-                let bestPixels = null;
-                let bestFromPeg = -1;
-                let bestToPeg = -1;
+            // Try all possible next pegs from current position
+            for (let tryPeg = 0; tryPeg < numPegs; tryPeg++) {
+                if (tryPeg === currentPeg) continue;
                 
-                for (let tryPeg = 0; tryPeg < numPegs; tryPeg++) {
-                    if (tryPeg === pegIndex) continue;
-                    
-                    const key = pegIndex < tryPeg 
-                        ? pegIndex * numPegs + tryPeg 
-                        : tryPeg * numPegs + pegIndex;
-                    
-                    if (used.has(key)) continue;
-                    
-                    const pixels = linePixelsCache.get(key);
-                    if (!pixels) continue;
-                    
-                    let diff = 0;
-                    for (let j = 0; j < pixels.length; j++) {
-                        const idx = pixels[j];
-                        diff += currentData[idx] - state.targetData[idx];
-                    }
-                    
-                    if (diff > maxDiff) {
-                        maxDiff = diff;
-                        bestKey = key;
-                        bestPixels = pixels;
-                        bestFromPeg = pegIndex;
-                        bestToPeg = tryPeg;
-                    }
+                // Check minimum distance
+                const dist = Math.min(
+                    Math.abs(tryPeg - currentPeg),
+                    numPegs - Math.abs(tryPeg - currentPeg)
+                );
+                if (dist < minDist) continue;
+                
+                // Check if this connection was already used
+                const connectionKey = getConnectionKey(currentPeg, tryPeg);
+                if (usedConnections.has(connectionKey)) continue;
+                
+                // Get cached pixels for this line
+                const pixels = linePixelsCache.get(connectionKey);
+                if (!pixels) continue;
+                
+                // Calculate brightness difference
+                // Positive diff = current brighter than target = needs darkening
+                let diff = 0;
+                for (let j = 0; j < pixels.length; j++) {
+                    const idx = pixels[j];
+                    diff += currentData[idx] - state.targetData[idx];
                 }
                 
-                if (maxDiff > threshold && bestPixels) {
-                    for (let j = 0; j < bestPixels.length; j++) {
-                        const idx = bestPixels[j];
-                        currentData[idx] = Math.max(0, currentData[idx] - darkness);
-                    }
-                    
-                    const p1Idx = Math.floor(bestKey / numPegs);
-                    const p2Idx = bestKey % numPegs;
-                    
-                    outCtx.strokeStyle = `rgba(0,0,0,${lineAlpha})`;
-                    outCtx.lineWidth = 1;
-                    outCtx.beginPath();
-                    outCtx.moveTo(pegPositions[p1Idx * 2], pegPositions[p1Idx * 2 + 1]);
-                    outCtx.lineTo(pegPositions[p2Idx * 2], pegPositions[p2Idx * 2 + 1]);
-                    outCtx.stroke();
-                    
-                    // Record the path (from → to)
-                    state.stringPath.push([bestFromPeg, bestToPeg]);
-                    
-                    used.add(bestKey);
-                    lineCount++;
-                    improved = true;
-                    
-                    if (lineCount % 50 === 0) {
-                        const progress = Math.min(100, (lineCount / maxLines) * 100);
-                        elements.progressEl.style.width = progress + '%';
-                        elements.statLines.textContent = lineCount;
-                        elements.statIter.textContent = iterCount;
-                        elements.statTime.textContent = formatTime(performance.now() - startTime);
-                        await sleep(0);
-                    }
+                // Track the best option
+                if (diff > maxDiff) {
+                    maxDiff = diff;
+                    bestNextPeg = tryPeg;
+                    bestPixels = pixels;
                 }
-                
-                if (lineCount >= maxLines) break mainLoop;
             }
             
-            elements.statIter.textContent = iterCount;
+            // If no good connection found, we're done
+            if (maxDiff <= threshold || bestNextPeg === -1) {
+                break;
+            }
             
-            if (!improved) break;
+            // Draw the string
+            for (let j = 0; j < bestPixels.length; j++) {
+                const idx = bestPixels[j];
+                currentData[idx] = Math.max(0, currentData[idx] - darkness);
+            }
             
-            await sleep(0);
+            // Draw on canvas
+            outCtx.strokeStyle = `rgba(0,0,0,${lineAlpha})`;
+            outCtx.lineWidth = 1;
+            outCtx.beginPath();
+            outCtx.moveTo(
+                pegPositions[currentPeg * 2],
+                pegPositions[currentPeg * 2 + 1]
+            );
+            outCtx.lineTo(
+                pegPositions[bestNextPeg * 2],
+                pegPositions[bestNextPeg * 2 + 1]
+            );
+            outCtx.stroke();
+            
+            // Mark connection as used
+            const connectionKey = getConnectionKey(currentPeg, bestNextPeg);
+            usedConnections.add(connectionKey);
+            
+            // Move to next peg
+            currentPeg = bestNextPeg;
+            state.stringPath.push(currentPeg);
+            
+            lineCount++;
+            
+            // Update UI periodically
+            if (lineCount % 50 === 0) {
+                const progress = Math.min(100, (lineCount / maxLines) * 100);
+                elements.progressEl.style.width = progress + '%';
+                elements.statLines.textContent = lineCount;
+                elements.statIter.textContent = '-';
+                elements.statTime.textContent = formatTime(performance.now() - startTime);
+                await sleep(0);
+            }
         }
+        
+        // =====================================================================
+        // COMPLETION
+        // =====================================================================
         
         const elapsed = performance.now() - startTime;
         
         elements.progressEl.style.width = '100%';
         elements.statLines.textContent = lineCount;
-        elements.statIter.textContent = iterCount;
+        elements.statIter.textContent = '-';
         elements.statTime.textContent = formatTime(elapsed);
         
         state.running = false;
@@ -999,11 +1039,11 @@
         elements.btnPath.disabled = false;
         
         if (state.stopFlag) {
-            setStatus(`Stopped: ${lineCount} strings, ${iterCount} iterations`);
+            setStatus(`Stopped: ${lineCount} strings`);
         } else if (lineCount >= maxLines) {
-            setStatus(`Max lines reached: ${lineCount} strings, ${iterCount} iterations`);
+            setStatus(`Max lines reached: ${lineCount} strings`);
         } else {
-            setStatus(`Done! ${lineCount} strings, ${iterCount} iterations`);
+            setStatus(`Done! ${lineCount} strings (continuous path)`);
         }
     }
     
