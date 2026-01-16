@@ -165,6 +165,14 @@
         }
         .btn-stop:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
         .btn-stop:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .btn-group button {
+            margin-bottom: 0;
+        }
         .stats {
             margin-top: 20px;
             padding-top: 15px;
@@ -196,6 +204,121 @@
             display: none;
         }
         .error-msg.show { display: block; }
+        
+        /* Path Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h2 {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--accent);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--dim);
+            font-size: 24px;
+            cursor: pointer;
+            width: auto;
+            padding: 0;
+            margin: 0;
+        }
+        .modal-close:hover {
+            color: var(--text);
+        }
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .path-info {
+            font-size: 13px;
+            color: var(--dim);
+            margin-bottom: 15px;
+        }
+        .path-info strong {
+            color: var(--accent);
+        }
+        .path-content {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 12px;
+            line-height: 1.8;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .modal-footer button {
+            width: auto;
+            padding: 10px 20px;
+            margin: 0;
+        }
+        .format-select {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .format-btn {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--dim);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .format-btn:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+        .format-btn.active {
+            border-color: var(--accent);
+            background: rgba(232, 197, 71, 0.1);
+            color: var(--accent);
+        }
     </style>
 </head>
 <body>
@@ -246,7 +369,10 @@
             </div>
             <button class="btn-start" id="btnStart" disabled>Generate</button>
             <button class="btn-stop" id="btnStop" disabled>Stop</button>
-            <button class="btn-stop" id="btnDownload" disabled>Download</button>
+            <div class="btn-group">
+                <button class="btn-stop" id="btnDownload" disabled>Download Image</button>
+                <button class="btn-stop" id="btnPath" disabled>View Path</button>
+            </div>
             <div class="stats">
                 <div class="stat"><span>Strings</span><span id="statLines">0</span></div>
                 <div class="stat"><span>Iterations</span><span id="statIter">0</span></div>
@@ -258,36 +384,49 @@
         <a href="https://en.wikipedia.org/wiki/String_art" target="_blank">Learn about String Art</a>
     </footer>
 
+    <!-- Path Modal -->
+    <div class="modal-overlay" id="pathModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>String Path</h2>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="path-info">
+                    Total: <strong id="pathTotal">0</strong> strings | 
+                    Pegs: <strong id="pathPegs">0</strong> | 
+                    Peg numbering starts from <strong>0</strong> at top (12 o'clock), clockwise
+                </div>
+                <div class="format-select">
+                    <button class="format-btn active" data-format="sequence">Sequence</button>
+                    <button class="format-btn" data-format="pairs">Pairs</button>
+                    <button class="format-btn" data-format="csv">CSV</button>
+                    <button class="format-btn" data-format="json">JSON</button>
+                </div>
+                <div class="path-content" id="pathContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-stop" id="btnCopyPath">Copy to Clipboard</button>
+                <button class="btn-start" id="btnDownloadPath">Download</button>
+            </div>
+        </div>
+    </div>
+
 <script>
 /**
  * ============================================================================
- * STRING ART GENERATOR
+ * STRING ART GENERATOR WITH PATH EXPORT
  * ============================================================================
  * 
  * This application converts any image into a "string art" representation.
- * String art is a technique where an image is recreated by wrapping thread
- * around pegs arranged in a circle, creating the illusion of the original
- * image through the density of overlapping lines.
+ * It includes path export functionality for physical recreation.
  * 
- * ALGORITHM OVERVIEW:
- * -------------------
- * The algorithm uses a greedy approach to iteratively find the best string
- * to add that will make the current output most closely match the target:
- * 
- * 1. Place N pegs evenly around a circle
- * 2. Start with a white canvas
- * 3. For each peg, find the connection to another peg that would reduce
- *    the most "error" (difference between current and target brightness)
- * 4. Draw that string (semi-transparent black line)
- * 5. Repeat until no significant improvement can be made
- * 
- * KEY OPTIMIZATIONS IN THIS VERSION:
- * ----------------------------------
- * 1. Pre-computation of all peg positions using Float32Array
- * 2. Pre-computation of all possible line pixels using Bresenham's algorithm
- * 3. Using Set with numeric keys instead of string concatenation for tracking
- * 4. Using Typed Arrays (Uint8Array, Uint32Array) for better memory access
- * 5. Async/await pattern for non-blocking UI updates
+ * PATH EXPORT FORMATS:
+ * --------------------
+ * 1. Sequence: 0 → 180 → 45 → 230 → ... (continuous path)
+ * 2. Pairs: Each line as "from → to" pairs
+ * 3. CSV: Comma-separated values for spreadsheet import
+ * 4. JSON: Structured data for programmatic use
  * 
  * ============================================================================
  */
@@ -299,74 +438,48 @@
     // CONFIGURATION CONSTANTS
     // =========================================================================
     
-    /**
-     * SIZE: The dimensions of both canvases in pixels (square).
-     * Larger values produce higher quality but slower generation.
-     */
     const SIZE = 480;
-    
-    /**
-     * RADIUS: The radius of the circle where pegs are placed.
-     * Should be slightly less than SIZE/2 to leave a margin.
-     */
     const RADIUS = 230;
-    
-    /**
-     * CENTER: The center point of the canvas.
-     * All peg positions are calculated relative to this point.
-     */
     const CENTER = SIZE / 2;
     
     // =========================================================================
     // DOM ELEMENT CACHE
     // =========================================================================
     
-    /**
-     * Caching DOM elements improves performance by avoiding repeated
-     * document.getElementById() calls during the generation loop.
-     */
     const elements = {
-        // Canvas elements
         srcCanvas: document.getElementById('srcCanvas'),
         outCanvas: document.getElementById('outCanvas'),
-        
-        // File input elements
         fileInput: document.getElementById('fileInput'),
         dropZone: document.getElementById('dropZone'),
         fileLabel: document.getElementById('fileLabel'),
-        
-        // Control inputs
         numPegsInput: document.getElementById('numPegs'),
         lineAlphaInput: document.getElementById('lineAlpha'),
         thresholdInput: document.getElementById('threshold'),
         maxLinesInput: document.getElementById('maxLines'),
-        
-        // Buttons
         btnStart: document.getElementById('btnStart'),
         btnStop: document.getElementById('btnStop'),
         btnDownload: document.getElementById('btnDownload'),
-        
-        // Display elements
+        btnPath: document.getElementById('btnPath'),
         progressEl: document.getElementById('progress'),
         statusEl: document.getElementById('status'),
         errorMsg: document.getElementById('errorMsg'),
-        
-        // Statistics display
         statLines: document.getElementById('statLines'),
         statIter: document.getElementById('statIter'),
         statTime: document.getElementById('statTime'),
-        
-        // Value labels for sliders
         numPegsVal: document.getElementById('numPegsVal'),
         lineAlphaVal: document.getElementById('lineAlphaVal'),
         thresholdVal: document.getElementById('thresholdVal'),
-        maxLinesVal: document.getElementById('maxLinesVal')
+        maxLinesVal: document.getElementById('maxLinesVal'),
+        // Modal elements
+        pathModal: document.getElementById('pathModal'),
+        modalClose: document.getElementById('modalClose'),
+        pathTotal: document.getElementById('pathTotal'),
+        pathPegs: document.getElementById('pathPegs'),
+        pathContent: document.getElementById('pathContent'),
+        btnCopyPath: document.getElementById('btnCopyPath'),
+        btnDownloadPath: document.getElementById('btnDownloadPath')
     };
     
-    /**
-     * Get 2D rendering contexts for both canvases.
-     * The 'willReadFrequently' hint optimizes for getImageData() calls.
-     */
     const srcCtx = elements.srcCanvas.getContext('2d', { willReadFrequently: true });
     const outCtx = elements.outCanvas.getContext('2d');
     
@@ -374,98 +487,227 @@
     // APPLICATION STATE
     // =========================================================================
     
-    /**
-     * Centralized state object for better organization and debugging.
-     * 
-     * @property {Image|null} sourceImg - The loaded source image
-     * @property {Uint8Array|null} targetData - Grayscale pixel values of target
-     * @property {boolean} running - Whether generation is in progress
-     * @property {boolean} stopFlag - Signal to stop generation early
-     * @property {string} fileName - Original filename for download naming
-     */
     let state = {
         sourceImg: null,
         targetData: null,
         running: false,
         stopFlag: false,
-        fileName: ''
+        fileName: '',
+        // Path tracking
+        stringPath: [],      // Array of [fromPeg, toPeg] pairs
+        numPegsUsed: 0,      // Number of pegs used in generation
+        currentFormat: 'sequence'
     };
     
     // =========================================================================
     // UTILITY FUNCTIONS
     // =========================================================================
     
-    /**
-     * Display an error message to the user.
-     * The message auto-hides after 5 seconds.
-     * 
-     * @param {string} msg - The error message to display
-     */
     function showError(msg) {
         elements.errorMsg.textContent = msg;
         elements.errorMsg.classList.add('show');
         setTimeout(() => elements.errorMsg.classList.remove('show'), 5000);
     }
     
-    /**
-     * Update the status text below the progress bar.
-     * 
-     * @param {string} text - The status message
-     * @param {boolean} active - If true, use accent color (indicates processing)
-     */
     function setStatus(text, active = false) {
         elements.statusEl.textContent = text;
         elements.statusEl.className = 'status' + (active ? ' active' : '');
     }
     
-    /**
-     * Format milliseconds into a human-readable time string.
-     * 
-     * @param {number} ms - Time in milliseconds
-     * @returns {string} Formatted time (e.g., "1.5s" or "234ms")
-     */
     function formatTime(ms) {
         if (ms < 1000) return ms + 'ms';
         return (ms / 1000).toFixed(1) + 's';
     }
     
-    /**
-     * Create a promise that resolves after a specified delay.
-     * Used to yield control back to the browser for UI updates.
-     * 
-     * @param {number} ms - Delay in milliseconds (0 for next event loop)
-     * @returns {Promise} Resolves after the delay
-     */
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+    
+    // =========================================================================
+    // PATH FORMATTING FUNCTIONS
+    // =========================================================================
+    
+    /**
+     * Convert the path to a continuous sequence.
+     * This represents the order in which you would wind the string.
+     * 
+     * Example output: 0 → 180 → 45 → 230 → 12 → ...
+     * 
+     * @returns {string} Formatted sequence string
+     */
+    function formatAsSequence() {
+        if (state.stringPath.length === 0) return 'No path generated yet.';
+        
+        // Build continuous path by following connections
+        const sequence = [state.stringPath[0][0]];
+        
+        for (const [from, to] of state.stringPath) {
+            sequence.push(to);
+        }
+        
+        // Format with arrows, 10 nodes per line
+        let result = '';
+        for (let i = 0; i < sequence.length; i++) {
+            result += sequence[i];
+            if (i < sequence.length - 1) {
+                result += ' → ';
+            }
+            if ((i + 1) % 10 === 0 && i < sequence.length - 1) {
+                result += '\n';
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * Format path as individual pairs.
+     * Each line shows one string connection.
+     * 
+     * Example output:
+     * 1: 0 → 180
+     * 2: 180 → 45
+     * 3: 45 → 230
+     * 
+     * @returns {string} Formatted pairs string
+     */
+    function formatAsPairs() {
+        if (state.stringPath.length === 0) return 'No path generated yet.';
+        
+        return state.stringPath
+            .map((pair, i) => `${(i + 1).toString().padStart(4)}: ${pair[0]} → ${pair[1]}`)
+            .join('\n');
+    }
+    
+    /**
+     * Format path as CSV for spreadsheet import.
+     * 
+     * Example output:
+     * step,from,to
+     * 1,0,180
+     * 2,180,45
+     * 
+     * @returns {string} CSV formatted string
+     */
+    function formatAsCSV() {
+        if (state.stringPath.length === 0) return 'No path generated yet.';
+        
+        let csv = 'step,from,to\n';
+        csv += state.stringPath
+            .map((pair, i) => `${i + 1},${pair[0]},${pair[1]}`)
+            .join('\n');
+        
+        return csv;
+    }
+    
+    /**
+     * Format path as JSON for programmatic use.
+     * 
+     * @returns {string} JSON formatted string
+     */
+    function formatAsJSON() {
+        if (state.stringPath.length === 0) return '[]';
+        
+        const data = {
+            metadata: {
+                totalStrings: state.stringPath.length,
+                numPegs: state.numPegsUsed,
+                generatedAt: new Date().toISOString()
+            },
+            path: state.stringPath.map((pair, i) => ({
+                step: i + 1,
+                from: pair[0],
+                to: pair[1]
+            }))
+        };
+        
+        return JSON.stringify(data, null, 2);
+    }
+    
+    /**
+     * Get formatted path based on current format selection.
+     * 
+     * @returns {string} Formatted path string
+     */
+    function getFormattedPath() {
+        switch (state.currentFormat) {
+            case 'sequence': return formatAsSequence();
+            case 'pairs': return formatAsPairs();
+            case 'csv': return formatAsCSV();
+            case 'json': return formatAsJSON();
+            default: return formatAsSequence();
+        }
+    }
+    
+    /**
+     * Get file extension for current format.
+     * 
+     * @returns {string} File extension
+     */
+    function getFileExtension() {
+        switch (state.currentFormat) {
+            case 'csv': return 'csv';
+            case 'json': return 'json';
+            default: return 'txt';
+        }
+    }
+    
+    // =========================================================================
+    // MODAL FUNCTIONS
+    // =========================================================================
+    
+    function showPathModal() {
+        elements.pathTotal.textContent = state.stringPath.length;
+        elements.pathPegs.textContent = state.numPegsUsed;
+        elements.pathContent.textContent = getFormattedPath();
+        elements.pathModal.classList.add('show');
+    }
+    
+    function hidePathModal() {
+        elements.pathModal.classList.remove('show');
+    }
+    
+    function updatePathDisplay() {
+        elements.pathContent.textContent = getFormattedPath();
+    }
+    
+    async function copyPathToClipboard() {
+        try {
+            await navigator.clipboard.writeText(getFormattedPath());
+            elements.btnCopyPath.textContent = 'Copied!';
+            setTimeout(() => {
+                elements.btnCopyPath.textContent = 'Copy to Clipboard';
+            }, 2000);
+        } catch (err) {
+            showError('Failed to copy to clipboard');
+        }
+    }
+    
+    function downloadPath() {
+        const content = getFormattedPath();
+        const ext = getFileExtension();
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+        const filename = state.fileName 
+            ? `string-art-path-${state.fileName}-${timestamp}.${ext}`
+            : `string-art-path-${timestamp}.${ext}`;
+        
+        const blob = new Blob([content], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
     }
     
     // =========================================================================
     // PRE-COMPUTATION FUNCTIONS
     // =========================================================================
     
-    /**
-     * Pre-compute the (x, y) positions of all pegs around the circle.
-     * 
-     * This optimization stores all peg positions in a Float32Array,
-     * eliminating the need to recalculate trigonometric functions
-     * during the main generation loop.
-     * 
-     * Memory layout: [x0, y0, x1, y1, x2, y2, ...]
-     * Access pattern: positions[i * 2] = x, positions[i * 2 + 1] = y
-     * 
-     * @param {number} numPegs - Total number of pegs around the circle
-     * @returns {Float32Array} Array of alternating x, y coordinates
-     */
     function precomputePegPositions(numPegs) {
         const positions = new Float32Array(numPegs * 2);
         
         for (let i = 0; i < numPegs; i++) {
-            // Calculate angle for this peg
-            // Starting from -π/2 (top of circle) and going clockwise
             const angle = (i / numPegs) * Math.PI * 2 - Math.PI / 2;
-            
-            // Convert polar to Cartesian coordinates
             positions[i * 2] = CENTER + RADIUS * Math.cos(angle);
             positions[i * 2 + 1] = CENTER + RADIUS * Math.sin(angle);
         }
@@ -473,48 +715,21 @@
         return positions;
     }
     
-    /**
-     * Pre-compute pixel indices for all valid string connections.
-     * 
-     * This is the KEY OPTIMIZATION that dramatically improves performance.
-     * Instead of recalculating which pixels a line passes through on every
-     * iteration, we compute this once at startup and cache the results.
-     * 
-     * For 360 pegs with minDist=36, this creates ~60,000 cached lines.
-     * Each line stores the indices of pixels it passes through.
-     * 
-     * @param {number} numPegs - Total number of pegs
-     * @param {Float32Array} positions - Pre-computed peg positions
-     * @param {number} minDist - Minimum distance between pegs (in peg indices)
-     * @returns {Map<number, Uint32Array>} Map from connection key to pixel indices
-     */
     function precomputeAllLinePixels(numPegs, positions, minDist) {
         const lineCache = new Map();
         
-        // Iterate through all unique pairs of pegs
         for (let i = 0; i < numPegs; i++) {
-            // Round positions to integers for pixel calculations
             const x0 = Math.round(positions[i * 2]);
             const y0 = Math.round(positions[i * 2 + 1]);
             
-            // Only compute j > i to avoid duplicates (line i→j same as j→i)
             for (let j = i + 1; j < numPegs; j++) {
-                // Calculate circular distance between pegs
-                // (accounts for wrap-around, e.g., peg 0 is close to peg 359)
                 const dist = Math.min(j - i, numPegs - (j - i));
-                
-                // Skip connections that are too short
-                // Short strings don't contribute much visually and waste computation
                 if (dist < minDist) continue;
                 
                 const x1 = Math.round(positions[j * 2]);
                 const y1 = Math.round(positions[j * 2 + 1]);
                 
-                // Compute pixels along this line using Bresenham's algorithm
                 const pixels = bresenhamLine(x0, y0, x1, y1);
-                
-                // Store with a unique numeric key
-                // Key formula: i * numPegs + j guarantees uniqueness for i < j
                 const key = i * numPegs + j;
                 lineCache.set(key, pixels);
             }
@@ -523,67 +738,24 @@
         return lineCache;
     }
     
-    /**
-     * Bresenham's Line Algorithm - Compute all pixels along a line.
-     * 
-     * This is a classic computer graphics algorithm that determines which
-     * pixels should be lit to approximate a straight line between two points.
-     * It uses only integer arithmetic, making it very efficient.
-     * 
-     * The algorithm works by tracking an "error" term that accumulates
-     * as we step along the primary axis, and stepping along the secondary
-     * axis whenever the error exceeds a threshold.
-     * 
-     * @param {number} x0 - Starting x coordinate
-     * @param {number} y0 - Starting y coordinate
-     * @param {number} x1 - Ending x coordinate
-     * @param {number} y1 - Ending y coordinate
-     * @returns {Uint32Array} Array of pixel indices (y * SIZE + x)
-     */
     function bresenhamLine(x0, y0, x1, y1) {
         const pixels = [];
-        
-        // Calculate the absolute differences
         const dx = Math.abs(x1 - x0);
         const dy = Math.abs(y1 - y0);
-        
-        // Determine step direction for each axis
         const sx = x0 < x1 ? 1 : -1;
         const sy = y0 < y1 ? 1 : -1;
-        
-        // Initialize error term
-        // Positive err means we're closer to stepping in x
-        // Negative err means we're closer to stepping in y
         let err = dx - dy;
         
-        // Trace the line until we reach the endpoint
         while (true) {
-            // Only include pixels within canvas bounds
             if (x0 >= 0 && x0 < SIZE && y0 >= 0 && y0 < SIZE) {
-                // Convert 2D coordinate to 1D array index
                 pixels.push(y0 * SIZE + x0);
             }
-            
-            // Check if we've reached the endpoint
             if (x0 === x1 && y0 === y1) break;
-            
-            // Double the error to avoid floating point
             const e2 = 2 * err;
-            
-            // Step in x direction if appropriate
-            if (e2 > -dy) {
-                err -= dy;
-                x0 += sx;
-            }
-            
-            // Step in y direction if appropriate
-            if (e2 < dx) {
-                err += dx;
-                y0 += sy;
-            }
+            if (e2 > -dy) { err -= dy; x0 += sx; }
+            if (e2 < dx) { err += dx; y0 += sy; }
         }
         
-        // Return as Uint32Array for better memory efficiency and access speed
         return new Uint32Array(pixels);
     }
     
@@ -591,143 +763,83 @@
     // IMAGE LOADING AND PROCESSING
     // =========================================================================
     
-    /**
-     * Load and validate an image file selected by the user.
-     * 
-     * This function performs several validation checks:
-     * 1. Verifies the file is an image type
-     * 2. Checks file size is reasonable (< 10MB)
-     * 3. Handles loading errors gracefully
-     * 
-     * @param {File} file - The file object from file input or drag-drop
-     */
     function loadImage(file) {
-        // Validate file type using MIME type
         if (!file.type.startsWith('image/')) {
             showError('Please upload a valid image file');
             return;
         }
         
-        // Validate file size (10MB limit prevents memory issues)
         if (file.size > 10 * 1024 * 1024) {
             showError('Image file too large. Please choose an image under 10MB');
             return;
         }
         
-        // Use FileReader to load the image data
         const reader = new FileReader();
         
-        // Handle file reading errors
         reader.onerror = function() {
             showError('Error reading file');
         };
         
-        // Process the loaded file data
         reader.onload = function(e) {
             const img = new Image();
             
-            // Handle image decoding errors
             img.onerror = function() {
                 showError('Unable to load image. Format may not be supported');
             };
             
-            // Image loaded successfully
             img.onload = function() {
-                // Store image in state
                 state.sourceImg = img;
-                
-                // Extract filename without extension for later download naming
                 state.fileName = file.name.replace(/\.[^/.]+$/, '');
-                
-                // Process and display the source image
                 prepareSource();
-                
-                // Enable the generate button
                 elements.btnStart.disabled = false;
-                
-                // Update UI to show file is loaded
                 elements.dropZone.classList.add('has-file');
                 elements.fileLabel.textContent = file.name;
                 setStatus('Image loaded. Click Generate to start.');
             };
             
-            // Start loading the image from the data URL
             img.src = e.target.result;
         };
         
-        // Read the file as a data URL (base64 encoded)
         reader.readAsDataURL(file);
     }
     
-    /**
-     * Process the source image for string art generation.
-     * 
-     * This function:
-     * 1. Crops the image to a square (center crop)
-     * 2. Clips it to a circle
-     * 3. Converts it to grayscale
-     * 4. Stores the grayscale values for comparison during generation
-     * 
-     * The grayscale conversion uses the standard luminance formula:
-     * Y = 0.299*R + 0.587*G + 0.114*B
-     * This matches human perception (we're most sensitive to green).
-     */
     function prepareSource() {
-        // Clear canvas with white background
         srcCtx.fillStyle = '#fff';
         srcCtx.fillRect(0, 0, SIZE, SIZE);
         
-        // Calculate center crop dimensions
-        // This ensures we use the largest possible square from the center
         const minDim = Math.min(state.sourceImg.width, state.sourceImg.height);
-        const sx = (state.sourceImg.width - minDim) / 2;  // Source x offset
-        const sy = (state.sourceImg.height - minDim) / 2; // Source y offset
+        const sx = (state.sourceImg.width - minDim) / 2;
+        const sy = (state.sourceImg.height - minDim) / 2;
         
-        // Apply circular clipping mask
         srcCtx.save();
         srcCtx.beginPath();
         srcCtx.arc(CENTER, CENTER, RADIUS, 0, Math.PI * 2);
         srcCtx.clip();
-        
-        // Draw the image, scaling to fit the circle
         srcCtx.drawImage(
             state.sourceImg,
-            sx, sy, minDim, minDim,                              // Source rectangle
-            CENTER - RADIUS, CENTER - RADIUS, RADIUS * 2, RADIUS * 2  // Destination rectangle
+            sx, sy, minDim, minDim,
+            CENTER - RADIUS, CENTER - RADIUS, RADIUS * 2, RADIUS * 2
         );
         srcCtx.restore();
         
-        // Get pixel data for grayscale conversion
         const imgData = srcCtx.getImageData(0, 0, SIZE, SIZE);
-        const d = imgData.data;  // RGBA array: [r0, g0, b0, a0, r1, g1, b1, a1, ...]
+        const d = imgData.data;
         const len = d.length;
         
-        // Convert each pixel to grayscale using luminance formula
         for (let i = 0; i < len; i += 4) {
-            const gray = Math.round(
-                0.299 * d[i] +      // Red contribution
-                0.587 * d[i + 1] +  // Green contribution (highest weight)
-                0.114 * d[i + 2]    // Blue contribution
-            );
-            // Set R, G, B all to the same gray value
+            const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
             d[i] = d[i + 1] = d[i + 2] = gray;
         }
-        
-        // Write the grayscale image back to canvas
         srcCtx.putImageData(imgData, 0, 0);
         
-        // Draw a border around the circle for visual clarity
         srcCtx.strokeStyle = '#888';
         srcCtx.lineWidth = 1;
         srcCtx.beginPath();
         srcCtx.arc(CENTER, CENTER, RADIUS, 0, Math.PI * 2);
         srcCtx.stroke();
         
-        // Extract and store grayscale values in a compact array
-        // This will be used as the "target" during generation
         state.targetData = new Uint8Array(SIZE * SIZE);
         for (let i = 0; i < SIZE * SIZE; i++) {
-            // Every 4th element in RGBA data is the R value (which equals G and B now)
             state.targetData[i] = imgData.data[i * 4];
         }
     }
@@ -736,284 +848,156 @@
     // MAIN STRING ART GENERATION ALGORITHM
     // =========================================================================
     
-    /**
-     * Main generation function - orchestrates the string art creation.
-     * 
-     * ALGORITHM DETAILS:
-     * ------------------
-     * The algorithm is a greedy optimization that works as follows:
-     * 
-     * 1. INITIALIZATION:
-     *    - Pre-compute all peg positions
-     *    - Pre-compute all line pixel paths
-     *    - Initialize output canvas to white
-     *    - Initialize "current brightness" array to 255 (white)
-     * 
-     * 2. MAIN LOOP (repeat until no improvement):
-     *    For each peg as a starting point:
-     *      a. Try all valid connections to other pegs
-     *      b. Calculate "brightness difference" for each:
-     *         diff = sum of (current[pixel] - target[pixel]) for all pixels on line
-     *         Positive diff means area needs darkening
-     *      c. Select the connection with maximum diff > threshold
-     *      d. Draw that string and update brightness array
-     * 
-     * 3. TERMINATION:
-     *    - No connection exceeds threshold (convergence)
-     *    - Max lines reached
-     *    - User clicks Stop
-     * 
-     * WHY THIS WORKS:
-     * ---------------
-     * Each string darkens a line of pixels. By always choosing the line that
-     * most needs darkening, we progressively build up the image. The
-     * semi-transparent overlapping lines create gradients and details.
-     */
     async function startGeneration() {
-        // Prevent double-starts
         if (state.running || !state.sourceImg) return;
         
-        // Update state flags
         state.running = true;
         state.stopFlag = false;
         
-        // Update button states
+        // Clear previous path
+        state.stringPath = [];
+        
         elements.btnStart.disabled = true;
         elements.btnStop.disabled = false;
         elements.btnDownload.disabled = true;
+        elements.btnPath.disabled = true;
         
-        // =====================================================================
-        // PARAMETER EXTRACTION
-        // =====================================================================
-        
-        /** Number of pegs around the circle (more pegs = more detail, slower) */
         const numPegs = parseInt(elements.numPegsInput.value);
-        
-        /** Opacity of each string line (0-1) */
         const lineAlpha = parseInt(elements.lineAlphaInput.value) / 100;
-        
-        /** Minimum brightness difference required to draw a line */
         const threshold = parseInt(elements.thresholdInput.value);
-        
-        /** Maximum number of lines to draw (prevents infinite loops) */
         const maxLines = parseInt(elements.maxLinesInput.value);
-        
-        /** Amount to darken pixels per string (0-255 scale) */
         const darkness = Math.round(lineAlpha * 255);
-        
-        /** Minimum peg distance (10% of total) to avoid very short strings */
         const minDist = Math.floor(numPegs * 0.1);
         
-        // =====================================================================
-        // PRE-COMPUTATION PHASE
-        // =====================================================================
+        // Store number of pegs for path export
+        state.numPegsUsed = numPegs;
         
         setStatus('Pre-computing peg positions...', true);
-        await sleep(10);  // Yield to allow UI update
+        await sleep(10);
         
         const pegPositions = precomputePegPositions(numPegs);
         
         setStatus('Pre-computing line paths (this may take a few seconds)...', true);
         await sleep(10);
         
-        // This is the expensive operation - creates cache of all line pixels
         const linePixelsCache = precomputeAllLinePixels(numPegs, pegPositions, minDist);
         
-        // =====================================================================
-        // OUTPUT CANVAS INITIALIZATION
-        // =====================================================================
-        
-        // Start with white background
         outCtx.fillStyle = '#fff';
         outCtx.fillRect(0, 0, SIZE, SIZE);
-        
-        // Draw circle border
         outCtx.strokeStyle = '#ddd';
         outCtx.lineWidth = 1;
         outCtx.beginPath();
         outCtx.arc(CENTER, CENTER, RADIUS, 0, Math.PI * 2);
         outCtx.stroke();
         
-        // =====================================================================
-        // BRIGHTNESS TRACKING
-        // =====================================================================
-        
-        /**
-         * currentData tracks the simulated brightness of each pixel.
-         * Starts at 255 (white) and decreases as strings are drawn.
-         * This is separate from the canvas for efficiency - we don't need
-         * to read from the canvas, just write to it.
-         */
         const currentData = new Uint8Array(SIZE * SIZE);
-        currentData.fill(255);  // Initialize all pixels to white
+        currentData.fill(255);
         
-        // =====================================================================
-        // CONNECTION TRACKING
-        // =====================================================================
-        
-        /**
-         * Set to track which peg connections have been used.
-         * Using a Set with numeric keys is much faster than string concatenation.
-         * Key formula: min(i,j) * numPegs + max(i,j)
-         */
         const used = new Set();
         
-        // Statistics
         let lineCount = 0;
         let iterCount = 0;
         const startTime = performance.now();
         
+        // Track current peg for continuous path
+        let currentPeg = 0;
+        
         setStatus('Generating...', true);
         
-        // =====================================================================
-        // MAIN GENERATION LOOP
-        // =====================================================================
-        
-        /**
-         * Outer loop: Continue until convergence or limits reached
-         * 
-         * Each iteration of this loop goes through all pegs and tries to
-         * find the best connection for each. An "iteration" is complete
-         * when all pegs have been considered.
-         */
         mainLoop: while (!state.stopFlag && lineCount < maxLines) {
-            let improved = false;  // Track if any string was drawn this iteration
+            let improved = false;
             iterCount++;
             
-            // Inner loop: Try each peg as a starting point
             for (let pegIndex = 0; pegIndex < numPegs && !state.stopFlag; pegIndex++) {
-                
-                // Variables to track best connection found for this peg
                 let bestKey = -1;
                 let maxDiff = 0;
                 let bestPixels = null;
-                
-                // ---------------------------------------------------------
-                // SEARCH: Find the best connection from this peg
-                // ---------------------------------------------------------
+                let bestFromPeg = -1;
+                let bestToPeg = -1;
                 
                 for (let tryPeg = 0; tryPeg < numPegs; tryPeg++) {
-                    // Skip self-connection
                     if (tryPeg === pegIndex) continue;
                     
-                    // Generate consistent key (always smaller index first)
                     const key = pegIndex < tryPeg 
                         ? pegIndex * numPegs + tryPeg 
                         : tryPeg * numPegs + pegIndex;
                     
-                    // Skip if already used
                     if (used.has(key)) continue;
                     
-                    // Get cached pixel indices for this line
                     const pixels = linePixelsCache.get(key);
-                    if (!pixels) continue;  // May be null if below minDist
+                    if (!pixels) continue;
                     
-                    // -------------------------------------------------
-                    // Calculate brightness difference along the line
-                    // -------------------------------------------------
-                    // Positive diff = current is brighter than target
-                    //               = this area needs more darkening
                     let diff = 0;
                     for (let j = 0; j < pixels.length; j++) {
                         const idx = pixels[j];
                         diff += currentData[idx] - state.targetData[idx];
                     }
                     
-                    // Track the best (highest diff) connection
                     if (diff > maxDiff) {
                         maxDiff = diff;
                         bestKey = key;
                         bestPixels = pixels;
+                        bestFromPeg = pegIndex;
+                        bestToPeg = tryPeg;
                     }
                 }
                 
-                // ---------------------------------------------------------
-                // DRAW: If best connection exceeds threshold, draw it
-                // ---------------------------------------------------------
-                
                 if (maxDiff > threshold && bestPixels) {
-                    
-                    // Update simulated brightness for all pixels on the line
                     for (let j = 0; j < bestPixels.length; j++) {
                         const idx = bestPixels[j];
-                        // Subtract darkness, but clamp to 0 (can't go negative)
                         currentData[idx] = Math.max(0, currentData[idx] - darkness);
                     }
                     
-                    // Decode the key back to peg indices
                     const p1Idx = Math.floor(bestKey / numPegs);
                     const p2Idx = bestKey % numPegs;
                     
-                    // Draw the actual line on the output canvas
                     outCtx.strokeStyle = `rgba(0,0,0,${lineAlpha})`;
                     outCtx.lineWidth = 1;
                     outCtx.beginPath();
-                    outCtx.moveTo(
-                        pegPositions[p1Idx * 2],      // x1
-                        pegPositions[p1Idx * 2 + 1]   // y1
-                    );
-                    outCtx.lineTo(
-                        pegPositions[p2Idx * 2],      // x2
-                        pegPositions[p2Idx * 2 + 1]   // y2
-                    );
+                    outCtx.moveTo(pegPositions[p1Idx * 2], pegPositions[p1Idx * 2 + 1]);
+                    outCtx.lineTo(pegPositions[p2Idx * 2], pegPositions[p2Idx * 2 + 1]);
                     outCtx.stroke();
                     
-                    // Mark this connection as used
+                    // Record the path (from → to)
+                    state.stringPath.push([bestFromPeg, bestToPeg]);
+                    
                     used.add(bestKey);
                     lineCount++;
                     improved = true;
                     
-                    // -------------------------------------------------
-                    // UI Update: Refresh display every 50 lines
-                    // -------------------------------------------------
                     if (lineCount % 50 === 0) {
                         const progress = Math.min(100, (lineCount / maxLines) * 100);
                         elements.progressEl.style.width = progress + '%';
                         elements.statLines.textContent = lineCount;
                         elements.statIter.textContent = iterCount;
                         elements.statTime.textContent = formatTime(performance.now() - startTime);
-                        
-                        // Yield to browser to keep UI responsive
                         await sleep(0);
                     }
                 }
                 
-                // Check if we've hit the max lines limit
                 if (lineCount >= maxLines) break mainLoop;
             }
             
-            // Update iteration counter display
             elements.statIter.textContent = iterCount;
             
-            // ---------------------------------------------------------
-            // CONVERGENCE CHECK
-            // ---------------------------------------------------------
-            // If no strings were drawn this iteration, we've converged
             if (!improved) break;
             
-            // Yield to browser between iterations
             await sleep(0);
         }
         
-        // =====================================================================
-        // COMPLETION
-        // =====================================================================
-        
         const elapsed = performance.now() - startTime;
         
-        // Update final statistics
         elements.progressEl.style.width = '100%';
         elements.statLines.textContent = lineCount;
         elements.statIter.textContent = iterCount;
         elements.statTime.textContent = formatTime(elapsed);
         
-        // Reset state
         state.running = false;
         elements.btnStart.disabled = false;
         elements.btnStop.disabled = true;
         elements.btnDownload.disabled = false;
+        elements.btnPath.disabled = false;
         
-        // Set appropriate completion message
         if (state.stopFlag) {
             setStatus(`Stopped: ${lineCount} strings, ${iterCount} iterations`);
         } else if (lineCount >= maxLines) {
@@ -1027,24 +1011,12 @@
     // DOWNLOAD FUNCTIONALITY
     // =========================================================================
     
-    /**
-     * Download the generated string art as a PNG file.
-     * 
-     * The filename includes the original image name (if available)
-     * and a timestamp for uniqueness.
-     */
     function downloadResult() {
-        // Generate timestamp: YYYY-MM-DD-HH-MM-SS
-        const timestamp = new Date().toISOString()
-            .slice(0, 19)
-            .replace(/[T:]/g, '-');
-        
-        // Build filename
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
         const filename = state.fileName 
             ? `string-art-${state.fileName}-${timestamp}.png`
             : `string-art-${timestamp}.png`;
         
-        // Create temporary link and trigger download
         const link = document.createElement('a');
         link.download = filename;
         link.href = elements.outCanvas.toDataURL('image/png');
@@ -1055,74 +1027,78 @@
     // EVENT LISTENERS
     // =========================================================================
     
-    // ----- File Input Handling -----
-    
-    // Click on drop zone opens file picker
+    // File input
     elements.dropZone.addEventListener('click', () => elements.fileInput.click());
-    
-    // File selected via picker
     elements.fileInput.addEventListener('change', (e) => {
         if (e.target.files[0]) loadImage(e.target.files[0]);
     });
-    
-    // Drag over drop zone
     elements.dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();  // Required to allow drop
+        e.preventDefault();
         elements.dropZone.classList.add('over');
     });
-    
-    // Drag leaves drop zone
     elements.dropZone.addEventListener('dragleave', () => {
         elements.dropZone.classList.remove('over');
     });
-    
-    // File dropped on drop zone
     elements.dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         elements.dropZone.classList.remove('over');
         if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
     });
     
-    // ----- Slider Value Display Updates -----
-    
+    // Sliders
     elements.numPegsInput.addEventListener('input', function() {
         elements.numPegsVal.textContent = this.value;
     });
-    
     elements.lineAlphaInput.addEventListener('input', function() {
         elements.lineAlphaVal.textContent = this.value + '%';
     });
-    
     elements.thresholdInput.addEventListener('input', function() {
         elements.thresholdVal.textContent = this.value;
     });
-    
     elements.maxLinesInput.addEventListener('input', function() {
         elements.maxLinesVal.textContent = this.value;
     });
     
-    // ----- Button Click Handlers -----
-    
+    // Buttons
     elements.btnStart.addEventListener('click', () => {
         if (!state.running) startGeneration();
     });
-    
     elements.btnStop.addEventListener('click', () => {
         state.stopFlag = true;
     });
-    
     elements.btnDownload.addEventListener('click', downloadResult);
+    elements.btnPath.addEventListener('click', showPathModal);
+    
+    // Modal
+    elements.modalClose.addEventListener('click', hidePathModal);
+    elements.pathModal.addEventListener('click', (e) => {
+        if (e.target === elements.pathModal) hidePathModal();
+    });
+    elements.btnCopyPath.addEventListener('click', copyPathToClipboard);
+    elements.btnDownloadPath.addEventListener('click', downloadPath);
+    
+    // Format buttons
+    document.querySelectorAll('.format-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            state.currentFormat = btn.dataset.format;
+            updatePathDisplay();
+        });
+    });
+    
+    // Keyboard
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && elements.pathModal.classList.contains('show')) {
+            hidePathModal();
+        }
+    });
     
     // =========================================================================
     // INITIALIZATION
     // =========================================================================
     
-    /**
-     * Initialize canvases with placeholder graphics.
-     * Shows instructional text before any image is loaded.
-     */
     function initCanvases() {
-        // Source canvas - dark placeholder
         srcCtx.fillStyle = '#222';
         srcCtx.fillRect(0, 0, SIZE, SIZE);
         srcCtx.strokeStyle = '#444';
@@ -1134,7 +1110,6 @@
         srcCtx.textAlign = 'center';
         srcCtx.fillText('Upload image', CENTER, CENTER);
         
-        // Output canvas - light placeholder
         outCtx.fillStyle = '#f5f5f5';
         outCtx.fillRect(0, 0, SIZE, SIZE);
         outCtx.strokeStyle = '#ddd';
@@ -1147,7 +1122,6 @@
         outCtx.fillText('Result', CENTER, CENTER);
     }
     
-    // Run initialization
     initCanvases();
     
 })();
