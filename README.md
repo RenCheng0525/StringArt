@@ -31,6 +31,18 @@ A web-based **string art generator** that transforms any image into stunning thr
 - **Stop Anytime**: Pause generation and keep current progress.
 - **One-click Download**: Export your creation as a PNG image.
 
+### 🧵 Path Export (for Physical Recreation)
+
+- **View Path**: Display complete string connection sequence.
+- **Multiple Formats**:
+  - **Sequence**: Continuous path for winding (`0 → 180 → 45 → 230 → ...`)
+  - **Pairs**: Individual connections (`1: 0 → 180`, `2: 180 → 45`)
+  - **CSV**: Spreadsheet-compatible format
+  - **JSON**: Structured data with metadata for programmatic use
+- **Copy to Clipboard**: Instantly copy path data.
+- **Download Path**: Save as `.txt`, `.csv`, or `.json` file.
+- **Peg Numbering**: Starts from **0** at top (12 o'clock), clockwise.
+
 ### 🖱️ User Experience
 
 - **Drag & Drop**: Simply drop images onto the upload zone.
@@ -61,7 +73,7 @@ Each string darkens pixels along its path. By always choosing the line that most
 
 ## 🎓 Use Cases
 
-- **Physical Recreation**: Generate patterns to build real string art.
+- **Physical Recreation**: Export path data to build real string art projects.
 - **Portrait Art**: Transform photos into unique thread-based portraits.
 - **Educational Tool**: Visualize optimization algorithms in action.
 - **Creative Projects**: Generate unique artwork for prints or gifts.
